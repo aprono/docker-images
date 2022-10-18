@@ -1,7 +1,7 @@
 #!/bin/bash
 # LICENSE UPL 1.0
 #
-# Copyright (c) 1982-2021 Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 1982-2022 Oracle and/or its affiliates. All rights reserved.
 # 
 # Since: November, 2016
 # Author: gerald.venzl@oracle.com
@@ -120,14 +120,17 @@ else
   memory=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
 fi
 
+# Default memory to 2GB, if not able to fetch memory restrictions from cgroups
+export ALLOCATED_MEMORY=$((${memory:=2147483648}/1024/1024))
+
 # Github issue #219: Prevent integer overflow,
-# only check if memory digits are less than 11 (single GB range and below) 
+# only check if memory digits are less than 11 (single GB range and below)
 if [[ ${memory} != "max" && ${#memory} -lt 11 && ${memory} -lt 2147483648 ]]; then
-    echo "Error: The container doesn't have enough memory allocated."
-    echo "A database container needs at least 2 GB of memory."
-    echo "You currently only have $((memory/1024/1024)) MB allocated to the container."
-    exit 1;
-fi;
+   echo "Error: The container doesn't have enough memory allocated."
+   echo "A database container needs at least 2 GB of memory."
+   echo "You currently only have $ALLOCATED_MEMORY MB allocated to the container."
+   exit 1;
+fi
 
 # Check that hostname doesn't container any "_"
 # Github issue #711
@@ -141,6 +144,34 @@ trap _int SIGINT
 
 # Set SIGTERM handler
 trap _term SIGTERM
+
+# Default for ORACLE SID
+if [ "$ORACLE_SID" == "" ]; then
+   export ORACLE_SID=ORCLCDB
+else
+  # Make ORACLE_SID upper case
+  # Github issue # 984
+  export ORACLE_SID=${ORACLE_SID^^}
+
+  # Check whether SID is no longer than 12 bytes
+  # Github issue #246: Cannot start OracleDB image
+  if [ "${#ORACLE_SID}" -gt 12 ]; then
+     echo "Error: The ORACLE_SID must only be up to 12 characters long."
+     exit 1;
+  fi;
+
+  # Check whether SID is alphanumeric
+  # Github issue #246: Cannot start OracleDB image
+  if [[ "$ORACLE_SID" =~ [^a-zA-Z0-9] ]]; then
+     echo "Error: The ORACLE_SID must be alphanumeric."
+     exit 1;
+   fi;
+fi;
+
+# Setting up ORACLE_PWD if podman secret is passed on
+if [ -e '/run/secrets/oracle_pwd' ]; then
+   export ORACLE_PWD="$(cat '/run/secrets/oracle_pwd')"
+fi
 
 # Sanitizing env for XE
 if [ "${ORACLE_SID}" = "XE" ]; then
@@ -183,29 +214,6 @@ if [ "${DG_OBSERVER_ONLY}" = "true" ]; then
    fi
 fi
 
-# Default for ORACLE SID
-if [ "$ORACLE_SID" == "" ]; then
-   export ORACLE_SID=ORCLCDB
-else
-  # Make ORACLE_SID upper case
-  # Github issue # 984
-  export ORACLE_SID=${ORACLE_SID^^}
-
-  # Check whether SID is no longer than 12 bytes
-  # Github issue #246: Cannot start OracleDB image
-  if [ "${#ORACLE_SID}" -gt 12 ]; then
-     echo "Error: The ORACLE_SID must only be up to 12 characters long."
-     exit 1;
-  fi;
-
-  # Check whether SID is alphanumeric
-  # Github issue #246: Cannot start OracleDB image
-  if [[ "$ORACLE_SID" =~ [^a-zA-Z0-9] ]]; then
-     echo "Error: The ORACLE_SID must be alphanumeric."
-     exit 1;
-   fi;
-fi;
-
 # Read-only Oracle Home Config
 ORACLE_BASE_CONFIG=$("$ORACLE_HOME"/bin/orabaseconfig)
 export ORACLE_BASE_CONFIG
@@ -240,6 +248,11 @@ if [ -f "$ORACLE_BASE"/oradata/.${ORACLE_SID}"${CHECKPOINT_FILE_EXTN}" ] && [ -d
    else
       "$ORACLE_BASE"/"$START_FILE";
    fi
+
+   # In case of the prebuiltdb extended image container, provision changing password by ORACLE_PWD
+   if [ -n "${ORACLE_PWD}" ] && [ -e "${ORACLE_BASE}/oradata/${ORACLE_SID}/.prebuiltdb" ]; then
+      "${ORACLE_BASE}"/"${PWD_FILE}" "${ORACLE_PWD}"
+   fi
    
 else
   undoSymLinkFiles;
@@ -254,7 +267,7 @@ else
   # Clean up incomplete database
   rm -rf "$ORACLE_BASE"/oradata/$ORACLE_SID
   cp /etc/oratab oratab.bkp
-  sed "/$ORACLE_SID/d" oratab.bkp > /etc/oratab
+  sed "/^#/!d" oratab.bkp > /etc/oratab
   rm -f oratab.bkp
   rm -rf "$ORACLE_BASE"/cfgtoollogs/dbca/$ORACLE_SID
   rm -rf "$ORACLE_BASE"/admin/$ORACLE_SID
@@ -269,7 +282,8 @@ else
   # Check whether database is successfully created
   if "$ORACLE_BASE"/"$CHECK_DB_FILE"; then
     # Create a checkpoint file if database is successfully created
-    touch "$ORACLE_BASE"/oradata/.${ORACLE_SID}"${CHECKPOINT_FILE_EXTN}"
+    # Populate the checkpoint file with the current date to avoid timing issue when using NFS persistence in multi-replica mode
+    echo "$(date -Iseconds)" > "$ORACLE_BASE"/oradata/.${ORACLE_SID}"${CHECKPOINT_FILE_EXTN}"
   fi
 
   # Move database operational files to oradata
@@ -280,6 +294,12 @@ else
   
   # Execute custom provided setup scripts
   "$ORACLE_BASE"/"$USER_SCRIPTS_FILE" "$ORACLE_BASE"/scripts/setup
+
+  # Setup TCPS with the database
+  if [ "${ENABLE_TCPS}" = "true" ]; then
+    "${ORACLE_BASE}"/"${CONFIG_TCPS_FILE}"
+  fi
+
 fi;
 
 # Check whether database is up and running
@@ -309,6 +329,8 @@ fi;
 
 # Exiting the script without waiting on the tail logs
 if [ "$1" = "--nowait" ]; then
+   # Creating state-file for identifyig container of the prebuiltdb extended image
+   touch "${ORACLE_BASE}/oradata/${ORACLE_SID}/.prebuiltdb"
    exit $status;
 fi
 

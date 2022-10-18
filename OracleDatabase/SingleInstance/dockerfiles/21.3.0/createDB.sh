@@ -1,7 +1,7 @@
 #!/bin/bash
 # LICENSE UPL 1.0
 #
-# Copyright (c) 1982-2021 Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 1982-2022 Oracle and/or its affiliates. All rights reserved.
 # 
 # Since: November, 2016
 # Author: gerald.venzl@oracle.com
@@ -165,6 +165,11 @@ setupNetworkConfigXE;
 # Setting up database
 dbSetupSQL;
 
+# Making Oracle Database EM Express available remotely for XE
+sqlplus / as sysdba << EOF
+EXEC DBMS_XDB.SETLISTENERLOCALACCESS(FALSE);
+EOF
+
 exit 0
 fi;
 
@@ -273,18 +278,26 @@ fi
 
 # If both INIT_SGA_SIZE & INIT_PGA_SIZE aren't provided by user
 if [[ "${INIT_SGA_SIZE}" == "" && "${INIT_PGA_SIZE}" == "" ]]; then
-    # If there is greater than 8 CPUs default back to dbca memory calculations
-    # dbca will automatically pick 40% of available memory for Oracle DB
-    # The minimum of 2G is for small environments to guarantee that Oracle has enough memory to function
-    # However, bigger environment can and should use more of the available memory
-    # This is due to Github Issue #307
-    if [ "$(nproc)" -gt 8 ]; then
-        sed -i -e "s|totalMemory=2048||g" "$ORACLE_BASE"/dbca.rsp
-    fi;
+    # If AUTO_MEM_CALCULATION isn't set to false and a given amount of memory is allocated,
+    # we set the total memory with the amount of memory allocated for the container.
+    # Otherwise, we keep the default of 2GB.
+    if [[ "${AUTO_MEM_CALCULATION}" != "false" && "${ALLOCATED_MEMORY}" -le 655360 ]]; then
+      sed -i -e "s|totalMemory=.*|totalMemory=${ALLOCATED_MEMORY?}|g" "$ORACLE_BASE"/dbca.rsp
+    fi
 else
-    sed -i -e "s|totalMemory=2048||g" "$ORACLE_BASE"/dbca.rsp
+    sed -i -e "s|totalMemory=.*||g" "$ORACLE_BASE"/dbca.rsp
     sed -i -e "s|initParams=.*|&,sga_target=${INIT_SGA_SIZE}M,pga_aggregate_target=${INIT_PGA_SIZE}M|g" "$ORACLE_BASE"/dbca.rsp
-fi;
+fi
+
+# Adding INIT_CPU_COUNT initParam if provided
+if [ -n "${INIT_CPU_COUNT}" ]; then
+  sed -i -e "s|initParams=.*|&,cpu_count=${INIT_CPU_COUNT}|g" "$ORACLE_BASE"/dbca.rsp
+fi
+
+# Adding INIT_PROCESSES initParam if provided
+if [ -n "${INIT_PROCESSES}" ]; then
+  sed -i -e "s|initParams=.*|&,processes=${INIT_PROCESSES}|g" "$ORACLE_BASE"/dbca.rsp
+fi
 
 # Create network related config files (sqlnet.ora, tnsnames.ora, listener.ora)
 setupNetworkConfig;

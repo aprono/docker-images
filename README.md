@@ -23,10 +23,10 @@ software before installation. If you want commercial software downloaded for you
 - [Oracle HTTP Server](/OracleHTTPServer)
 - [Oracle Identity Governance](/OracleIdentityGovernance)
 - [Oracle Instant Client](/OracleInstantClient) (Basic, SDK and SQL*Plus)
-- [Oracle Internet Directory](/OracleInternetDirectory)
 - [Oracle Java](/OracleJava)
 - [Oracle Rest Data Services](OracleRestDataServices) (ORDS)
 - [Oracle SOA Suite](/OracleSOASuite)
+- [Oracle Tuxedo](/OracleTuxedo)
 - [Oracle Unified Directory](/OracleUnifiedDirectory)
 - [Oracle Unified Directory Service Manager](/OracleUnifiedDirectorySM)
 - [Oracle WebLogic Server](/OracleWebLogic)
@@ -52,7 +52,6 @@ software before installation. If you want commercial software downloaded for you
 - [ContainerCloud](/Archive/ContainerCloud)
 - [Oracle Data Integrator](/Archive/OracleDataIntegrator)
 - [Oracle Enterprise Data Quality](/Archive/OracleEDQ)
-- [Oracle Tuxedo](/Archive/OracleTuxedo)
 - [Oracle TSAM Plus](/Archive/OracleTuxedo/tsam)
 
 ## Pre-Built Images with Commercial Software

@@ -1,4 +1,4 @@
-# Copyright (c) 2019,2021 Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2019, 2022 Oracle and/or its affiliates. 
 #
 # Licensed under the Universal Permissive License v 1.0 as shown at https://oss.oracle.com/licenses/upl.
 #
@@ -38,11 +38,11 @@ RUN set -eux; \
 # Default to UTF-8 file.encoding
 ENV LANG en_US.UTF-8
 
-# Environment variables for the builder image.  
+# Environment variables for the builder image.
 # Required to validate that you are using the correct file
 
-ENV JAVA_PKG=server-jre-8u311-linux-x64.tar.gz \
-	JAVA_SHA256=4132d53f500fea109386a5734dc156468558d792082cfbd39f0a097e6f55e710 \
+ENV JAVA_PKG=server-jre-8u341-linux-x64.tar.gz \
+	JAVA_SHA256=71c5ef1d73737e324b5aff491a0603f6a9698006132d788df11ea6883b5d3b1b \
 	JAVA_HOME=/usr/java/jdk-8
 
 COPY $JAVA_PKG /tmp/jdk.tgz
@@ -58,7 +58,7 @@ FROM oraclelinux:7-slim
 # Default to UTF-8 file.encoding
 ENV LANG en_US.UTF-8
 
-ENV JAVA_VERSION=1.8.0_311 \
+ENV JAVA_VERSION=1.8.0_341 \
 	JAVA_HOME=/usr/java/jdk-8 
 	
 ENV	PATH $JAVA_HOME/bin:$PATH
